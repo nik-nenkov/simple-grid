@@ -6,12 +6,137 @@ import drawing.ElementDrawingUtil;
 import components.LogicGate;
 import components.InputSwitch;
 import components.OutputLight;
+import components.ClockTicker;
 import components.Pin;
 import components.Wire;
 import components.GateType;
 
 
 public class GridCanvas extends JPanel {
+        // Export circuit state to a custom text format
+        public String exportToText() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ELEMENTS\n");
+            int pinId = 0;
+            java.util.Map<Pin, Integer> pinMap = new java.util.HashMap<>();
+            for (Object obj : placedElements) {
+                if (obj instanceof LogicGate g) {
+                    sb.append(String.format("LogicGate,%s,%d,%d,%b,%b,%b\n",
+                        g.getType().name(), g.getCoordinates()[0], g.getCoordinates()[1],
+                        g.getInput1().getState(), g.getInput2().getState(), g.getOutput().getState()));
+                    pinMap.put(g.getInput1(), pinId++);
+                    pinMap.put(g.getInput2(), pinId++);
+                    pinMap.put(g.getOutput(), pinId++);
+                } else if (obj instanceof InputSwitch sw) {
+                    sb.append(String.format("InputSwitch,%d,%d,%b\n",
+                        sw.getCoordinates()[0], sw.getCoordinates()[1], sw.getState()));
+                    pinMap.put(sw.getOutput(), pinId++);
+                } else if (obj instanceof OutputLight ol) {
+                    sb.append(String.format("OutputLight,%d,%d\n",
+                        ol.getCoordinates()[0], ol.getCoordinates()[1]));
+                    pinMap.put(ol.getInput(), pinId++);
+                } else if (obj instanceof ClockTicker ct) {
+                    sb.append(String.format("ClockTicker,%d,%d,%b\n",
+                        ct.getCoordinates()[0], ct.getCoordinates()[1], ct.getState()));
+                    pinMap.put(ct.getOutput(), pinId++);
+                }
+            }
+            sb.append("WIRES\n");
+            for (Wire w : wires) {
+                int startId = pinMap.getOrDefault(w.getStartPin(), -1);
+                int endId = pinMap.getOrDefault(w.getEndPin(), -1);
+                sb.append(String.format("Wire,%d,%d", startId, endId));
+                for (java.awt.Point pt : w.getMidPoints()) {
+                    sb.append(String.format(",%d:%d", pt.x, pt.y));
+                }
+                sb.append("\n");
+            }
+            return sb.toString();
+        }
+
+        // Import circuit state from custom text format
+        public void importFromText(String text) {
+            placedElements.clear();
+            wires.clear();
+            String[] lines = text.split("\n");
+            java.util.List<Pin> pins = new java.util.ArrayList<>();
+            int i = 0;
+            // Parse elements
+            while (i < lines.length && !lines[i].equals("WIRES")) {
+                String line = lines[i++];
+                if (line.equals("ELEMENTS") || line.isEmpty()) continue;
+                String[] parts = line.split(",");
+                switch (parts[0]) {
+                    case "LogicGate": {
+                        GateType gt = GateType.valueOf(parts[1]);
+                        int x = Integer.parseInt(parts[2]);
+                        int y = Integer.parseInt(parts[3]);
+                        boolean in1 = Boolean.parseBoolean(parts[4]);
+                        boolean in2 = Boolean.parseBoolean(parts[5]);
+                        boolean out = Boolean.parseBoolean(parts[6]);
+                        LogicGate g = new LogicGate(x, y, gt);
+                        g.getInput1().setState(in1);
+                        g.getInput2().setState(in2);
+                        g.getOutput().setState(out);
+                        pins.add(g.getInput1());
+                        pins.add(g.getInput2());
+                        pins.add(g.getOutput());
+                        placedElements.add(g);
+                        break;
+                    }
+                    case "InputSwitch": {
+                        int x = Integer.parseInt(parts[1]);
+                        int y = Integer.parseInt(parts[2]);
+                        boolean state = Boolean.parseBoolean(parts[3]);
+                        InputSwitch sw = new InputSwitch(x, y);
+                        sw.setState(state);
+                        pins.add(sw.getOutput());
+                        placedElements.add(sw);
+                        break;
+                    }
+                    case "OutputLight": {
+                        int x = Integer.parseInt(parts[1]);
+                        int y = Integer.parseInt(parts[2]);
+                        OutputLight ol = new OutputLight(x, y);
+                        pins.add(ol.getInput());
+                        placedElements.add(ol);
+                        break;
+                    }
+                    case "ClockTicker": {
+                        int x = Integer.parseInt(parts[1]);
+                        int y = Integer.parseInt(parts[2]);
+                        boolean state = Boolean.parseBoolean(parts[3]);
+                        ClockTicker ct = new ClockTicker(x, y);
+                        ct.setState(state);
+                        pins.add(ct.getOutput());
+                        placedElements.add(ct);
+                        break;
+                    }
+                }
+            }
+            i++; // skip "WIRES"
+            // Parse wires
+            while (i < lines.length) {
+                String line = lines[i++];
+                if (line.isEmpty()) continue;
+                String[] parts = line.split(",");
+                if (!parts[0].equals("Wire")) continue;
+                int startId = Integer.parseInt(parts[1]);
+                int endId = Integer.parseInt(parts[2]);
+                java.util.List<java.awt.Point> midPoints = new java.util.ArrayList<>();
+                for (int j = 3; j < parts.length; j++) {
+                    String[] xy = parts[j].split(":");
+                    if (xy.length == 2) {
+                        midPoints.add(new java.awt.Point(Integer.parseInt(xy[0]), Integer.parseInt(xy[1])));
+                    }
+                }
+                if (startId >= 0 && endId >= 0 && startId < pins.size() && endId < pins.size()) {
+                    wires.add(new Wire(pins.get(startId), pins.get(endId), midPoints));
+                }
+            }
+            repaint();
+        }
+    private javax.swing.Timer repaintTimer;
     private Runnable selectionClearCallback = null;
     // Provider to get the current selected gate type from the sidebar
     public interface SelectedGateTypeProvider { String getSelectedGateType(); }
@@ -35,9 +160,10 @@ public class GridCanvas extends JPanel {
     // No longer store selectedGateType here; always use sidebar as source of truth
     private int mouseGridX = -1;
     private int mouseGridY = -1;
-    private java.util.List<Object> placedElements = new java.util.ArrayList<>(); // LogicGate, InputSwitch, OutputLight
+    private java.util.List<Object> placedElements = new java.util.ArrayList<>(); // LogicGate, InputSwitch, OutputLight, ClockTicker
     private java.util.List<Wire> wires = new java.util.ArrayList<>();
     private Pin wireStartPin = null;
+    private java.util.List<Point> wirePreviewMidPoints = new java.util.ArrayList<>(); // midpoints for wire being drawn
     private Pin hoveredPin = null;
     private boolean previewVisible = false;
     private boolean simulationMode = false;
@@ -49,6 +175,16 @@ public class GridCanvas extends JPanel {
 
     public void setSimulationMode(boolean sim) {
         this.simulationMode = sim;
+        // Start or stop all ClockTickers
+        for (Object obj : placedElements) {
+            if (obj instanceof components.ClockTicker ct) {
+                if (sim) {
+                    ct.startTicker();
+                } else {
+                    ct.stopTicker();
+                }
+            }
+        }
         repaint();
     }
 
@@ -65,6 +201,9 @@ public class GridCanvas extends JPanel {
     }
 
     public GridCanvas() {
+        // Timer to repaint the grid at least 10 times per second
+        repaintTimer = new javax.swing.Timer(100, e -> repaint());
+        repaintTimer.start();
         java.awt.event.MouseAdapter mouseAdapter = new java.awt.event.MouseAdapter() {
             private boolean dragging = false;
 
@@ -121,26 +260,34 @@ public class GridCanvas extends JPanel {
                             selectedElements.clear();
                             repaint();
                         }
-                        // --- Wire drawing mode: click output pin, then input pin ---
+                        // --- Multi-segment wire drawing logic ---
                         Pin clickedPin = hoveredPin != null ? hoveredPin : findClosestPin(e.getX(), e.getY(), 10);
-                        if (clickedPin != null) {
-                            if (wireStartPin == null && isOutputPin(clickedPin)) {
-                                wireStartPin = clickedPin;
-                            } else if (wireStartPin != null && isInputPin(clickedPin) && wireStartPin != clickedPin) {
-                                wires.add(new Wire(wireStartPin, clickedPin));
-                                wireStartPin = null;
-                                repaint();
-                            } else {
-                                wireStartPin = null;
-                            }
+                        int gx = (e.getX() - offsetX + gridSize / 2) / gridSize;
+                        int gy = (e.getY() - offsetY + gridSize / 2) / gridSize;
+                        if (wireStartPin == null && clickedPin != null && isOutputPin(clickedPin)) {
+                            // Start new wire
+                            wireStartPin = clickedPin;
+                            wirePreviewMidPoints.clear();
+                        } else if (wireStartPin != null && clickedPin != null && isInputPin(clickedPin) && wireStartPin != clickedPin) {
+                            // Finish wire on input pin
+                            wires.add(new Wire(wireStartPin, clickedPin, new java.util.ArrayList<>(wirePreviewMidPoints)));
+                            wireStartPin = null;
+                            wirePreviewMidPoints.clear();
+                            repaint();
+                        } else if (wireStartPin != null && (clickedPin == null || (!isInputPin(clickedPin) || wireStartPin == clickedPin))) {
+                            // Add a grid node as a midpoint
+                            wirePreviewMidPoints.add(new Point(gx, gy));
                         } else {
                             wireStartPin = null;
+                            wirePreviewMidPoints.clear();
                         }
                     } else if (selectedGateType != null && previewVisible) {
                         int x = mouseGridX;
                         int y = mouseGridY;
                         if (selectedGateType.equals("INPUT_SWITCH")) {
                             placedElements.add(new InputSwitch(x, y));
+                        } else if (selectedGateType.equals("CLOCK_TICKER")) {
+                            placedElements.add(new ClockTicker(x, y));
                         } else if (selectedGateType.equals("OUTPUT_LIGHT")) {
                             placedElements.add(new OutputLight(x, y));
                         } else {
@@ -272,6 +419,16 @@ public class GridCanvas extends JPanel {
                             minDist = dist;
                             closest = p;
                         }
+                    } else if (obj instanceof ClockTicker) {
+                        Pin p = ((ClockTicker) obj).getOutput();
+                        int[] c = p.getCoordinates();
+                        int px = c[0] * gridSize + offsetX;
+                        int py = c[1] * gridSize + offsetY;
+                        double dist = Math.hypot(sx - px, sy - py);
+                        if (dist < radius && dist < minDist) {
+                            minDist = dist;
+                            closest = p;
+                        }
                     } else if (obj instanceof OutputLight) {
                         Pin p = ((OutputLight) obj).getInput();
                         int[] c = p.getCoordinates();
@@ -293,6 +450,8 @@ public class GridCanvas extends JPanel {
                     if (obj instanceof LogicGate && ((LogicGate) obj).getOutput() == p)
                         return true;
                     if (obj instanceof InputSwitch && ((InputSwitch) obj).getOutput() == p)
+                        return true;
+                    if (obj instanceof ClockTicker && ((ClockTicker) obj).getOutput() == p)
                         return true;
                 }
                 return false;
@@ -396,24 +555,18 @@ public class GridCanvas extends JPanel {
     }
 
     private void clearPinStatesExceptInputSwitches() {
-        java.util.HashSet<Pin> inputSwitchPins = new java.util.HashSet<>();
+        // Only set output pins of input switches and clock tickers at the start of each frame
         for (Object obj : placedElements) {
             if (obj instanceof InputSwitch) {
                 InputSwitch sw = (InputSwitch) obj;
                 sw.getOutput().setState(sw.getState());
-                inputSwitchPins.add(sw.getOutput());
+            } else if (obj instanceof ClockTicker) {
+                ClockTicker ct = (ClockTicker) obj;
+                ct.getOutput().setState(ct.getState());
             }
         }
-        for (Object obj : placedElements) {
-            if (obj instanceof LogicGate) {
-                LogicGate gate = (LogicGate) obj;
-                gate.getInput1().setState(false);
-                gate.getInput2().setState(false);
-                gate.getOutput().setState(false);
-            } else if (obj instanceof OutputLight) {
-                ((OutputLight) obj).getInput().setState(false);
-            }
-        }
+        // Do NOT reset gate pins or outputs; this preserves feedback and memory for latches
+        // OutputLight pins will be set by wire propagation and gate logic
     }
 
     private void propagateWireStates() {
@@ -442,7 +595,7 @@ public class GridCanvas extends JPanel {
     // Draw preview wire if in wire drawing mode
     private void drawPreviewWire(Graphics2D g2d) {
         String selectedGateType = selectedGateTypeProvider != null ? selectedGateTypeProvider.getSelectedGateType() : null;
-        WireDrawingUtil.drawPreviewWire(g2d, wireStartPin, gridSize, offsetX, offsetY, lastMousePosition, selectedGateType);
+        WireDrawingUtil.drawPreviewWire(g2d, wireStartPin, gridSize, offsetX, offsetY, wirePreviewMidPoints, lastMousePosition, selectedGateType);
     }
 
     // Draw all placed elements (gates, switches, lights)
@@ -459,6 +612,10 @@ public class GridCanvas extends JPanel {
                 InputSwitch sw = (InputSwitch) obj;
                 boolean highlight = (wireStartPin != null && sw.getOutput() == wireStartPin) || (hoveredPin != null && sw.getOutput() == hoveredPin);
                 ElementDrawingUtil.drawInputSwitchWithPinHighlightAndSelection(g, sw, false, highlight, gridSize, offsetX, offsetY, simulationMode, selected);
+            } else if (obj instanceof ClockTicker) {
+                ClockTicker ct = (ClockTicker) obj;
+                boolean highlight = (wireStartPin != null && ct.getOutput() == wireStartPin) || (hoveredPin != null && ct.getOutput() == hoveredPin);
+                ElementDrawingUtil.drawClockTickerWithPinHighlightAndSelection(g, ct, false, highlight, gridSize, offsetX, offsetY, simulationMode, selected);
             } else if (obj instanceof OutputLight) {
                 OutputLight ol = (OutputLight) obj;
                 boolean highlight = (wireStartPin != null && ol.getInput() == wireStartPin) || (hoveredPin != null && ol.getInput() == hoveredPin);
@@ -481,6 +638,9 @@ public class GridCanvas extends JPanel {
             } else if (obj instanceof OutputLight) {
                 coords = ((OutputLight) obj).getCoordinates();
                 dims = ((OutputLight) obj).getDimensions();
+            } else if (obj instanceof ClockTicker) {
+                coords = ((ClockTicker) obj).getCoordinates();
+                dims = ((ClockTicker) obj).getDimensions();
             }
             if (coords != null && dims != null) {
                 int centerX = coords[0] * gridSize + offsetX;
@@ -505,6 +665,8 @@ public class GridCanvas extends JPanel {
             int y = mouseGridY;
             if (selectedGateType.equals("INPUT_SWITCH")) {
                 ElementDrawingUtil.drawInputSwitch(g, new InputSwitch(x, y), true, gridSize, offsetX, offsetY, simulationMode);
+            } else if (selectedGateType.equals("CLOCK_TICKER")) {
+                ElementDrawingUtil.drawClockTicker(g, new ClockTicker(x, y), true, gridSize, offsetX, offsetY, simulationMode);
             } else if (selectedGateType.equals("OUTPUT_LIGHT")) {
                 ElementDrawingUtil.drawOutputLight(g, new OutputLight(x, y), true, gridSize, offsetX, offsetY, simulationMode);
             } else {

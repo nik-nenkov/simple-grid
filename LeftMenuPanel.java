@@ -24,7 +24,7 @@ public class LeftMenuPanel extends JPanel {
         add(titleLabel);
 
         String[] gateTypes = java.util.Arrays.stream(GateType.values()).map(Enum::name).toArray(String[]::new);
-        String[] elementTypes = {"INPUT_SWITCH", "OUTPUT_LIGHT"};
+        String[] elementTypes = {"INPUT_SWITCH", "CLOCK_TICKER", "OUTPUT_LIGHT"};
         String[] allTypes = new String[gateTypes.length + elementTypes.length];
         System.arraycopy(gateTypes, 0, allTypes, 0, gateTypes.length);
         System.arraycopy(elementTypes, 0, allTypes, gateTypes.length, elementTypes.length);
@@ -32,7 +32,11 @@ public class LeftMenuPanel extends JPanel {
 
         for (int i = 0; i < allTypes.length; i++) {
             String type = allTypes[i];
-            String label = type.equals("INPUT_SWITCH") ? "Input Switch" : type.equals("OUTPUT_LIGHT") ? "Output Light" : type;
+            String label;
+            if (type.equals("INPUT_SWITCH")) label = "Input Switch";
+            else if (type.equals("CLOCK_TICKER")) label = "Clock Ticker";
+            else if (type.equals("OUTPUT_LIGHT")) label = "Output Light";
+            else label = type;
             JButton btn = new JButton(label);
             gateButtons[i] = btn;
             btn.setAlignmentX(Component.CENTER_ALIGNMENT);

@@ -5,8 +5,37 @@ import components.InputSwitch;
 import components.LogicGate;
 import components.OutputLight;
 import components.Pin;
+import components.ClockTicker;
 
 public class ElementDrawingUtil {
+        // Draw ClockTicker with pin highlight and selection glow
+    public static void drawClockTickerWithPinHighlightAndSelection(Graphics gIn, ClockTicker ct, boolean preview, boolean highlightPin, int gridSize, int offsetX, int offsetY, boolean simulationMode, boolean selected) {
+        RectCenter rc = new RectCenter(ct.getCoordinates(), ct.getDimensions(), gridSize, offsetX, offsetY);
+        Color old = gIn.getColor();
+        // Draw yellow glow if selected
+        if (selected) {
+            gIn.setColor(new Color(255, 255, 100, 180));
+            gIn.fillRect(rc.left - 6, rc.top - 6, (rc.right - rc.left) + 12, (rc.bottom - rc.top) + 12);
+        }
+        drawPin(gIn, ct.getOutput(), gridSize, offsetX, offsetY, highlightPin);
+        Color bgColor = (preview || !ct.getState() || !simulationMode) ? Colors.ELEMENT_BG_OFF : Colors.ELEMENT_BG_ON;
+        drawComponentBody(gIn, rc, bgColor);
+        Font symbolFont = gridSize >= 40 ? Fonts.SYMBOL_LARGE : (gridSize >= 28 ? Fonts.SYMBOL_MEDIUM : Fonts.SYMBOL_SMALL);
+        drawCenteredSymbol(gIn, "\u23F1", symbolFont, rc.centerX, rc.centerY, Color.BLUE); // ⏱
+        gIn.setColor(old);
+    }
+
+    // Draw ClockTicker (preview or normal)
+    public static void drawClockTicker(Graphics gIn, ClockTicker ct, boolean preview, int gridSize, int offsetX, int offsetY, boolean simulationMode) {
+        RectCenter rc = new RectCenter(ct.getCoordinates(), ct.getDimensions(), gridSize, offsetX, offsetY);
+        Color old = gIn.getColor();
+        drawPin(gIn, ct.getOutput(), gridSize, offsetX, offsetY, false);
+        Color bgColor = (preview || !ct.getState() || !simulationMode) ? Colors.ELEMENT_BG_OFF : Colors.ELEMENT_BG_ON;
+        drawComponentBody(gIn, rc, bgColor);
+        Font symbolFont = gridSize >= 40 ? Fonts.SYMBOL_LARGE : (gridSize >= 28 ? Fonts.SYMBOL_MEDIUM : Fonts.SYMBOL_SMALL);
+        drawCenteredSymbol(gIn, "\u23F1", symbolFont, rc.centerX, rc.centerY, Color.BLUE); // ⏱
+        gIn.setColor(old);
+    }
     // Utility to draw a pin (with optional highlight)
     private static void drawPin(Graphics g, Pin pin, int gridSize, int offsetX, int offsetY, boolean highlight) {
         int[] coords = pin.getCoordinates();
