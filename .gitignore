@@ -1,0 +1,36 @@
+# Exclude compiled Java class files
+*.class
+
+# Exclude build output directories
+bin/
+out/
+
+# Exclude IDE/project files
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# Exclude package files
+*.jar
+*.war
+*.ear
+
+# Exclude OS generated files
+Thumbs.db
+Desktop.ini
+
+# Exclude Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Exclude Launch4j output
+*.exe
