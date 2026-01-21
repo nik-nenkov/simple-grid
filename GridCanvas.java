@@ -214,8 +214,17 @@ public class GridCanvas extends JPanel {
                 lastDragY = e.getY();
                 // Enable dragging for left mouse button
                 dragging = e.getButton() == java.awt.event.MouseEvent.BUTTON1;
-                // Right click selection clearing is now handled globally in Main.java
-                // (No-op here)
+
+                // Cancel wire drawing on right mouse button (edit mode only)
+                if (!simulationMode && e.getButton() == java.awt.event.MouseEvent.BUTTON3) {
+                    if (wireStartPin != null) {
+                        wireStartPin = null;
+                        wirePreviewMidPoints.clear();
+                        repaint();
+                        return;
+                    }
+                }
+
                 // Toggle InputSwitch on mouse press in simulation mode
                 if (simulationMode && e.getButton() == java.awt.event.MouseEvent.BUTTON1) {
                     for (Object obj : placedElements) {
@@ -494,6 +503,13 @@ public class GridCanvas extends JPanel {
             @Override
             public void keyPressed(java.awt.event.KeyEvent e) {
                 if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) {
+                    // Cancel wire drawing if in progress
+                    if (wireStartPin != null) {
+                        wireStartPin = null;
+                        wirePreviewMidPoints.clear();
+                        repaint();
+                        return;
+                    }
                     if (selectionClearCallback != null) {
                         selectionClearCallback.run();
                     }

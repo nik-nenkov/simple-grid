@@ -1,0 +1,5 @@
+ELEMENTS
+InputSwitch,9,10,false
+OutputLight,21,10
+WIRES
+Wire,0,1
